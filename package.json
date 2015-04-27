@@ -14,5 +14,9 @@
     "Swex"
   ],
   "author": "Benoît Morgan",
-  "license": "GPLv3"
+  "license": "GPLv3",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/bntmorgan/hotopuc.git"
+  }
 }
