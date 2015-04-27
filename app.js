@@ -9,9 +9,10 @@
  * https://gist.github.com/rtt/10403467
  */
 
-var https = require('https');
-var fs = require('fs');
+var https = require('https')
+var fs = require('fs')
 var extend = require('extend')
+var fs = require('fs')
 
 function Match(o) {
   this.name = o.name || 'John Doe'
@@ -33,7 +34,7 @@ function Photo(o) {
 // Get fg id
 //
 // http://findmyfacebookid.com/
-//   
+//
 // fb_user_id="<id>"
 //
 // curl -v -X POST https://api.gotinder.com/auth \
@@ -44,8 +45,11 @@ function Photo(o) {
 
 function Tinder() {
   // Save this
+  
   var self = this
+
   // Config
+
   this.host = 'api.gotinder.com' 
   this.fb_token = '<fb-token>'
   this.fb_user_id='<id>'
@@ -55,14 +59,18 @@ function Tinder() {
     'User-Agent': 'Tinder/3.0.4 (iPhone; iOS 7.1; Scale/2.00)'
   }
   // Data
+
   this.raw_matches = null
   this.blocks = null
   this.lists = null
   this.deleted_lists = null
   this.last_activity_date = null
+
   // Models
+
   this.matches = []
   // Functions
+
   this.getUpdates = function(cb) {
     var post_data = JSON.stringify({'last_activity_date':''})
     var heads = extend({}, self.http_headers, {
@@ -75,12 +83,12 @@ function Tinder() {
       path: '/updates',
       method: 'POST',
       headers: heads
-    };
+    }
 
     // Set up the request
     var post_req = https.request(post_options, function(res) {
-      res.setEncoding('utf8');
-      var r = "";
+      res.setEncoding('utf8')
+      var r = ""
       var end = function() {
         var t = eval('[' + r + ']')[0]
         self.raw_matches = t.matches
@@ -93,18 +101,18 @@ function Tinder() {
       }
       res.on('data', function (chunk) {
         r += chunk
-      });
-      res.on('end', end);
-      res.on('close', end);
-    });
+      })
+      res.on('end', end)
+      res.on('close', end)
+    })
 
     post_req.on('error', function(err) {
-      console.log(err);
-    });
+      console.log(err)
+    })
 
     // post the data
-    post_req.write(post_data);
-    post_req.end();
+    post_req.write(post_data)
+    post_req.end()
   }
 
   this.getMatchesInfo = function(cb) {
@@ -126,23 +134,39 @@ function Tinder() {
     cb()
   }
 
+  // Save the matches into a cache file DB
+  this.cacheSave = function(cb) {
+    fs.writeFile(".matchesDB", JSON.stringify(self.matches, null, 2), function(err) {
+      if(err) {
+        return console.log(err)
+      }
+      console.log("Cache saved")
+      cb()
+    })
+  }
+
   this.printAllUrls = function(cb) {
     console.log('#!/bin/bash')
     self.matches.forEach(function(p) {
       p.photos.forEach(function(ph, i) {
         console.log('wget "' + ph.url + '" -O ' + p.name + '_' + i + '.jpg')
       })
-    });
+    })
   }
 }
 
 
 function main(argv) {
   t = new Tinder()
+  console.log("start")
   // setup database
   t.getUpdates(function() {
     t.getMatchesInfo(function() {
-      t.printAllUrls()
+      t.cacheSave(function() {
+        t.printAllUrls(function() {
+          console.log("end")
+        })
+      })
     })
   })
 }
