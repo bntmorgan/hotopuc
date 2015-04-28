@@ -76,7 +76,7 @@ function Tinder() {
   this.raw_last_activity_date = null
 
   // Models
-  this.matches = []
+  this.matches = {}
 
   // Attributes
   this.v = false
@@ -137,12 +137,12 @@ function Tinder() {
         verbose('    photo url : ' + ph.url)
         photos.push(new Photo({'url': ph.url}))
       })
-      self.matches.push(new Match({
+      self.matches[p._id] = new Match({
         'name': p.name,
         'photos': photos,
         'id': p._id,
         'mid': e._id
-      }))
+      })
     })
     cb()
   }
@@ -168,6 +168,13 @@ function Tinder() {
       verbose("Cache saved")
       cb()
     })
+  }
+
+  // Print all matches
+  this.printAllMatches = function(cb, o) {
+    for (var k in self.matches) {
+      console.log('[' + k + ']: ' + self.matches[k].name)
+    }
   }
 
   this.printAllUrls = function(cb, o) {
@@ -205,6 +212,8 @@ function Options() {
     opt = require('node-getopt').create([
       ['v', 'verbose'             ,'Verbose output'],
       ['u', 'update'              ,'Recompute cache'],
+      ['c', 'chick=ARG'           ,'Set chick id'],
+      ['l', 'list'                ,'List all the chicks'],
       ['w', 'wget=ARG'            ,'Compute wget script and write to file'],
       ['h', 'help'                ,'display this help'],
       ['', 'version'              ,'show version']
@@ -236,6 +245,7 @@ function Pipeline(options, tinder) {
   this.options = options
   this.tinder = tinder
   this.p = []
+  this.matchId = 0
 
   this.buildPipeline = function() {
     // Build the options
@@ -250,13 +260,18 @@ function Pipeline(options, tinder) {
       } else {
         self.p.push(new Command({f: self.tinder.cacheLoad}))
       }
+      if (o.chick) {
+        self.matchId = o.chick
+        verbose('Match id selected is : ' + self.matchId)
+      }
+      if (o.list) {
+        self.p.push(new Command({f: self.tinder.printAllMatches}))
+      }
       if (o.wget) {
         self.p.push(new Command({f: self.tinder.printAllUrls, o: {out: o.wget}}))
       }
       // Everytime in the end
-      if (true) {
-        self.p.push(new Command({f: self.tinder.cacheSave}))
-      }
+      self.p.push(new Command({f: self.tinder.cacheSave}))
     })
   }
 
