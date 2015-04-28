@@ -153,7 +153,7 @@ function Tinder() {
       if (err) {
         throw 'error opening file: ' + err;
       }
-      verbose("Cache saved")
+      verbose("Cache loaded")
       self.matches = eval('[' + b + ']')[0]
       cb()
     })
@@ -262,25 +262,24 @@ function Pipeline(options, tinder) {
 
   this.execute = function(cb) {
     verbose("start execute")
-    var e = function(cpt) {
+    var e = function() {
       if (self.p.length > 0) {
-        verbose(self.p)
         self.p.shift().execute(e)
       } else {
         cb()
       }
     }
-    e(0)
+    e()
   }
 }
 
 function main() {
-  console.log("start")
+  verbose("Pipeline start")
   // Build pipeline
   p = new Pipeline(new Options(), new Tinder())
   p.buildPipeline()
   p.execute(function() {
-    console.log("end")
+    verbose("Pipeline end")
   })
 }
 
