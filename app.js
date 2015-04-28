@@ -16,12 +16,19 @@ var extend = require('extend')
 var fs = require('fs')
 
 var v = false
-var verbose = function(s) {
+var verbose = function(s, l) {
+  if (typeof(l)==='undefined') l = 'info';
   if (v) {
+    process.stdout.write('[' + l + '] ')
     console.log(s)
   }
 }
 
+var error = function(s) {
+  process.stdout.write('[error] ')
+  console.log(s)
+  process.kill()
+}
 
 function Match(o) {
   this.name = o.name || 'John Doe'
@@ -147,6 +154,13 @@ function Tinder() {
     cb()
   }
 
+  this.getMatch = function(id) {
+    if (self.matches[id] == undefined) {
+      error('Unexisting match')
+    }
+    return self.matches[id]
+  }
+
   // Save the matches into a cache file DB
   this.cacheLoad = function(cb, o) {
     fs.readFile(".matchesDB",  null, function(err, b) {
@@ -170,11 +184,63 @@ function Tinder() {
     })
   }
 
+  this.messageSend = function(cb, o) {
+    match = self.getMatch(o.id)
+    verbose(match)
+    verbose(o.m)
+    verbose('Message sent !')
+
+    var post_data = JSON.stringify({'message': o.m})
+    var heads = extend({}, self.http_headers, {
+      'X-Auth-Token': self.access_token,
+      'Content-Length': Buffer.byteLength(post_data)
+    })
+    var options = {
+      host: self.host,
+      port: '443',
+      path: '/user/matches/' + match.mid,
+      method: 'POST',
+      headers: heads
+    }
+
+    // Set up the request
+    var post_req = https.request(options, function(res) {
+      res.setEncoding('utf8')
+      var r = ""
+      var end = function() {
+        var t = eval('[' + r + ']')[0]
+        verbose(t)
+        // Call the callback
+        cb()
+      }
+      res.on('data', function (chunk) {
+        r += chunk
+      })
+      res.on('end', end)
+      res.on('close', end)
+    })
+
+    post_req.on('error', function(err) {
+      throw 'error opening file: ' + err;
+    })
+
+    // post the data
+    post_req.write(post_data)
+    post_req.end()
+  }
+
+  // Print a match
+  this.printMatch = function(cb, o) {
+    verbose("Chick id : " + o.id)
+    cb()
+  }
+
   // Print all matches
   this.printAllMatches = function(cb, o) {
     for (var k in self.matches) {
       console.log('[' + k + ']: ' + self.matches[k].name)
     }
+    cb()
   }
 
   this.printAllUrls = function(cb, o) {
@@ -185,11 +251,11 @@ function Tinder() {
       var b = new Buffer('#!/bin/bash\n')
       fs.write(fd, b, 0, b.length, null, function() {
         var xxx = ""
-        self.matches.forEach(function(p) {
-          p.photos.forEach(function(ph, i) {
-            xxx += 'wget "' + ph.url + '" -O ' + p.name + '_' + i + '.jpg\n'
+        for (var k in self.matches) {
+          self.matches[k].photos.forEach(function(ph, i) {
+            xxx += 'wget "' + ph.url + '" -O ' + self.matches[k].name + '_' + i + '.jpg\n'
           })
-        })
+        }
         b = new Buffer(xxx)
         fs.write(fd, b, 0, b.length, null, function(a, b , c) {
           fs.close(fd, function() {
@@ -213,7 +279,8 @@ function Options() {
       ['v', 'verbose'             ,'Verbose output'],
       ['u', 'update'              ,'Recompute cache'],
       ['c', 'chick=ARG'           ,'Set chick id'],
-      ['l', 'list'                ,'List all the chicks'],
+      ['l', 'list'                ,'List all the matched chicks'],
+      ['m', 'message=ARG'         ,'Send a message to the current chick'],
       ['w', 'wget=ARG'            ,'Compute wget script and write to file'],
       ['h', 'help'                ,'display this help'],
       ['', 'version'              ,'show version']
@@ -245,7 +312,7 @@ function Pipeline(options, tinder) {
   this.options = options
   this.tinder = tinder
   this.p = []
-  this.matchId = 0
+  this.matchId = null
 
   this.buildPipeline = function() {
     // Build the options
@@ -264,6 +331,12 @@ function Pipeline(options, tinder) {
         self.matchId = o.chick
         verbose('Match id selected is : ' + self.matchId)
       }
+      if (o.message) {
+        if (self.matchId == null) {
+          error('Select your chick first')
+        }
+        self.p.push(new Command({f: self.tinder.messageSend, o: {id: self.matchId, m: o.message}}))
+      }
       if (o.list) {
         self.p.push(new Command({f: self.tinder.printAllMatches}))
       }
@@ -276,7 +349,7 @@ function Pipeline(options, tinder) {
   }
 
   this.execute = function(cb) {
-    verbose("start execute")
+    verbose("Pipeline start")
     var e = function() {
       if (self.p.length > 0) {
         self.p.shift().execute(e)
@@ -289,7 +362,6 @@ function Pipeline(options, tinder) {
 }
 
 function main() {
-  verbose("Pipeline start")
   // Build pipeline
   p = new Pipeline(new Options(), new Tinder())
   p.buildPipeline()
