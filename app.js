@@ -33,8 +33,16 @@ var error = function(s) {
 function Match(o) {
   this.name = o.name || 'John Doe'
   this.photos = o.photos || []
+  this.messages = o.messages || []
   this.id = o.id || 0
   this.mid = o.mid || 0
+}
+
+function Message(o) {
+  this.m = o.m || ''
+  this.from = o.from || ''
+  this.to = o.to || ''
+  this.date = o.date || ''
 }
 
 function Photo(o) {
@@ -70,6 +78,7 @@ function Tinder() {
   this.fb_token = '<fb-token>'
   this.fb_user_id='<id>'
   this.access_token ='<access-token>' 
+  this.tinder_id = '<tinder-id>'
   this.http_headers = {
     'Content-Type': 'application/json',
     'User-Agent': 'Tinder/3.0.4 (iPhone; iOS 7.1; Scale/2.00)'
@@ -144,9 +153,17 @@ function Tinder() {
         verbose('    photo url : ' + ph.url)
         photos.push(new Photo({'url': ph.url}))
       })
+      messages = []
+      e.messages.forEach(function(m) {
+        verbose('  msg id : ' + m._id)
+        verbose('  msg from : ' + m.from)
+        verbose('    msg text : ' + m.message)
+        messages.push(new Message({'m': m.message, 'from': m.from, 'to': m.to, 'date': m.sent_date}))
+      })
       self.matches[p._id] = new Match({
         'name': p.name,
         'photos': photos,
+        'messages': messages,
         'id': p._id,
         'mid': e._id
       })
@@ -232,6 +249,15 @@ function Tinder() {
   // Print a match
   this.printMatch = function(cb, o) {
     verbose("Chick id : " + o.id)
+    match = self.getMatch(o.id)
+    console.log(match.name + ' :')
+    match.messages.forEach(function(m) {
+      if (self.tinder_id == m.from) {
+        console.log('  [' + m.date + ']me- ' + m.m)
+      } else {
+        console.log('  [' + m.date + ']boobz- ' + m.m)
+      }
+    })
     cb()
   }
 
@@ -281,6 +307,7 @@ function Options() {
       ['c', 'chick=ARG'           ,'Set chick id'],
       ['l', 'list'                ,'List all the matched chicks'],
       ['m', 'message=ARG'         ,'Send a message to the current chick'],
+      ['p', 'print'               ,'Print a matched chick'],
       ['w', 'wget=ARG'            ,'Compute wget script and write to file'],
       ['h', 'help'                ,'display this help'],
       ['', 'version'              ,'show version']
@@ -330,6 +357,12 @@ function Pipeline(options, tinder) {
       if (o.chick) {
         self.matchId = o.chick
         verbose('Match id selected is : ' + self.matchId)
+      }
+      if (o.print) {
+        if (self.matchId == null) {
+          error('Select your chick first')
+        }
+        self.p.push(new Command({f: self.tinder.printMatch, o: {id: self.matchId}}))
       }
       if (o.message) {
         if (self.matchId == null) {
