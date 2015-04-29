@@ -158,7 +158,8 @@ function Tinder() {
         verbose('  msg id : ' + m._id)
         verbose('  msg from : ' + m.from)
         verbose('    msg text : ' + m.message)
-        messages.push(new Message({'m': m.message, 'from': m.from, 'to': m.to, 'date': m.sent_date}))
+        messages.push(new Message({'m': m.message, 'from': m.from, 'to': m.to,
+            'date': m.sent_date}))
       })
       self.matches[p._id] = new Match({
         'name': p.name,
@@ -192,7 +193,8 @@ function Tinder() {
 
   // Save the matches into a cache file DB
   this.cacheSave = function(cb, o) {
-    fs.writeFile(".matchesDB", JSON.stringify(self.matches, null, 2), function(err) {
+    fs.writeFile(".matchesDB", JSON.stringify(self.matches, null, 2),
+        function(err) {
       if (err) {
         throw 'error opening file: ' + err;
       }
@@ -274,7 +276,9 @@ function Tinder() {
     if (o.id != undefined) {
       matches.push(self.getMatch(o.id))
     } else {
-      matches = self.matches
+      for (var k in self.matches) {
+        matches.push(self.matches[k])
+      }
     }
     fs.open(o.out, 'w', function(err, fd) {
       if (err) {
@@ -282,18 +286,24 @@ function Tinder() {
       }
       var b = new Buffer('#!/bin/bash\n')
       fs.write(fd, b, 0, b.length, null, function() {
-        var xxx = ""
-        for (var k in matches) {
-          matches[k].photos.forEach(function(ph, i) {
-            xxx += 'wget "' + ph.url + '" -O ' + matches[k].name + '_' + i + '.jpg\n'
-          })
+        var wf = function(mc, pc) {
+          if (pc >= matches[mc].photos.length) {
+            mc++
+            pc = 0
+          }
+          if (mc < matches.length) {
+            var b = new Buffer('wget "' + matches[mc].photos[pc].url + '" -O ' +
+                matches[mc].name + '_' + pc + '.jpg\n')
+            fs.write(fd, b, 0, b.length, null, function(a, b , c) {
+              wf(mc, pc + 1)
+            })
+          } else {
+            fs.close(fd, function() {
+              cb()
+            })
+          }
         }
-        b = new Buffer(xxx)
-        fs.write(fd, b, 0, b.length, null, function(a, b , c) {
-          fs.close(fd, function() {
-            cb()
-          })
-        })
+        wf(0, 0)
       })
     })
   }
@@ -368,13 +378,15 @@ function Pipeline(options, tinder) {
         if (self.matchId == null) {
           error('Select your chick first')
         }
-        self.p.push(new Command({f: self.tinder.printMatch, o: {id: self.matchId}}))
+        self.p.push(new Command({f: self.tinder.printMatch, o: {id:
+            self.matchId}}))
       }
       if (o.message) {
         if (self.matchId == null) {
           error('Select your chick first')
         }
-        self.p.push(new Command({f: self.tinder.messageSend, o: {id: self.matchId, m: o.message}}))
+        self.p.push(new Command({f: self.tinder.messageSend, o: {id:
+            self.matchId, m: o.message}}))
       }
       if (o.list) {
         self.p.push(new Command({f: self.tinder.printAllMatches}))
