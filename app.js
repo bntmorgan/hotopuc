@@ -270,6 +270,12 @@ function Tinder() {
   }
 
   this.printAllUrls = function(cb, o) {
+    var matches = []
+    if (o.id != undefined) {
+      matches.push(self.getMatch(o.id))
+    } else {
+      matches = self.matches
+    }
     fs.open(o.out, 'w', function(err, fd) {
       if (err) {
         throw 'error opening file: ' + err;
@@ -277,9 +283,9 @@ function Tinder() {
       var b = new Buffer('#!/bin/bash\n')
       fs.write(fd, b, 0, b.length, null, function() {
         var xxx = ""
-        for (var k in self.matches) {
-          self.matches[k].photos.forEach(function(ph, i) {
-            xxx += 'wget "' + ph.url + '" -O ' + self.matches[k].name + '_' + i + '.jpg\n'
+        for (var k in matches) {
+          matches[k].photos.forEach(function(ph, i) {
+            xxx += 'wget "' + ph.url + '" -O ' + matches[k].name + '_' + i + '.jpg\n'
           })
         }
         b = new Buffer(xxx)
@@ -374,7 +380,11 @@ function Pipeline(options, tinder) {
         self.p.push(new Command({f: self.tinder.printAllMatches}))
       }
       if (o.wget) {
-        self.p.push(new Command({f: self.tinder.printAllUrls, o: {out: o.wget}}))
+        var opt = {out: o.wget}
+        if (self.matchId != null) {
+          opt.id = self.matchId
+        }
+        self.p.push(new Command({f: self.tinder.printAllUrls, o: opt}))
       }
       // Everytime in the end
       self.p.push(new Command({f: self.tinder.cacheSave}))
