@@ -11,7 +11,6 @@
 
 var opt = require('node-getopt')
 var https = require('https')
-var fs = require('fs')
 var extend = require('extend')
 var fs = require('fs')
 
