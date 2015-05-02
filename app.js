@@ -108,6 +108,7 @@ function Tinder() {
   this.v = false
 
   this.getRecsInfo = function(cb, o) {
+    var recs = {}
     self.raw_recs.results.forEach(function(p) {
       verbose('Id : ' + p._id, 'debug')
       verbose('  name : ' + p.name, 'debug')
@@ -118,13 +119,15 @@ function Tinder() {
         verbose('    photo url : ' + ph.url, 'debug')
         photos.push(new Photo({'url': ph.url}))
       })
-      self.recs[p._id] = new Rec({
+      recs[p._id] = new Rec({
         'name': p.name,
         'photos': photos,
         'birth_date': p.birth_daye,
         'id': p._id
       })
     })
+    // do not replace, extend it because they are not given by the api again
+    extend(self.recs, recs)
     cb()
   }
 
@@ -303,8 +306,8 @@ function Tinder() {
 
   this.messageSend = function(cb, o) {
     match = self.getMatch(o.id)
-    verbose(match)
-    verbose(o.m)
+    verbose(match, 'debug')
+    verbose(o.m, 'debug')
     verbose('Message sent !')
 
     var post_data = JSON.stringify({'message': o.m})
@@ -326,7 +329,6 @@ function Tinder() {
       var r = ""
       var end = function() {
         var t = eval('[' + r + ']')[0]
-        verbose(t)
         // Call the callback
         cb()
       }
@@ -420,6 +422,8 @@ function Tinder() {
       var end = function() {
         var t = eval('[' + r + ']')[0]
         verbose('Remaining likes : ' + t.likes_remaining)
+        // We can remove the recommendation from the list
+        delete self.recs[o.id]
         // Call the callback
         cb()
       }
@@ -525,7 +529,8 @@ function Options() {
   this.doOptions = function(cb) {
     opt = require('node-getopt').create([
       ['v', 'verbose'             ,'Verbose output'],
-      ['u', 'update'              ,'Recompute cache'],
+      ['u', 'update'              ,'Update matches'],
+      ['U', 'update-recs'         ,'Update recommendations'],
       ['c', 'chick=ARG'           ,'Set chick id'],
       ['L', 'like'                ,'Like the chick'],
       ['l', 'list'                ,'List all the matched chicks'],
@@ -552,7 +557,6 @@ function Command(options) {
   this.f = options.f
   this.o = options.o
 
-  verbose(self.f)
   // Methods
   this.execute = function(cb) {
     self.f(cb, self.o)
@@ -579,6 +583,8 @@ function Pipeline(options, tinder) {
       if (o.update) {
         self.p.push(new Command({f: self.tinder.getUpdates}))
         self.p.push(new Command({f: self.tinder.getMatchesInfo}))
+      }
+      if (o['update-recs']) {
         self.p.push(new Command({f: self.tinder.getRecs}))
         self.p.push(new Command({f: self.tinder.getRecsInfo}))
       }
