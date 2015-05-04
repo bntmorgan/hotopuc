@@ -275,7 +275,7 @@ function Tinder() {
 
   this.getRec = function(id) {
     if (self.recs[id] == undefined) {
-      error('Unexisting match')
+      error('Unexisting recommendation')
     }
     return self.recs[id]
   }
@@ -593,7 +593,7 @@ function Options() {
       ['m', 'message=ARG'         ,'Send a message to the current chick'],
       ['p', 'print'               ,'Print a matched chick'],
       ['w', 'wget-matches=ARG'    ,'Compute wget script for match photo and write to file'],
-      ['W', 'wget-recs=ARG'       ,'Compute wget script for match photo and write to file'],
+      ['W', 'wget-recs=ARG'       ,'Compute wget script for rec photo and write to file'],
       [null,'extrem-mass-like'    ,'Extrem mass like dude, the casual way'],
       ['i', 'interactive'         ,'Interactive mode, for extrem mass like'],
       ['h', 'help'                ,'display this help'],
@@ -692,11 +692,10 @@ function Pipeline(options, tinder) {
         self.p.push(new Command({f: self.tinder.printAllMatchesUrls, o: opt}))
       }
       if (o.like) {
-        opt = {}
-        if (self.chickId != null) {
-          opt.id = self.chickId
+        if (self.chickId == null) {
+          error('Select your chick first')
         }
-        self.p.push(new Command({f: self.tinder.recLike, o: opt}))
+        self.p.push(new Command({f: self.tinder.recLike, o: {id: self.chickId}}))
       }
       if (o['extrem-mass-like']) {
         self.p.push(new Command({f: self.tinder.extremMassLike}))
