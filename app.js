@@ -13,17 +13,27 @@ var opt = require('node-getopt')
 var https = require('https')
 var extend = require('extend')
 var fs = require('fs')
+var prompt = require('prompt')
 
 var v = false
+var debug = false
+var i = false
 var verbose = function(s, l) {
   if (typeof(l)==='undefined') l = 'info';
-  if (l == 'debug') {
+  if (l == 'debug' && debug == false) {
     return
   }
   if (v) {
     process.stdout.write('[' + l + '] ')
     console.log(s)
   }
+}
+
+var getKey = function(cb) {
+  prompt.get(['like'], function (err, result) {
+    if (err) { return onErr(err); }
+    cb(result.like)
+  })
 }
 
 var error = function(s) {
@@ -103,9 +113,6 @@ function Tinder() {
   // Models
   this.matches = {}
   this.recs = {}
-
-  // Attributes
-  this.v = false
 
   this.getRecsInfo = function(cb, o) {
     var recs = {}
@@ -218,7 +225,8 @@ function Tinder() {
   }
 
   this.getMatchesInfo = function(cb, o) {
-    matches = {}
+    var matches = {}
+    var m = null
     self.raw_matches.forEach(function(e) {
       var p = e.person
       verbose('Id : ' + p._id, 'debug')
@@ -237,18 +245,29 @@ function Tinder() {
         messages.push(new Message({'m': m.message, 'from': m.from, 'to': m.to,
             'date': m.sent_date}))
       })
-      matches[p._id] = new Match({
+      m = new Match({
         'name': p.name,
         'photos': photos,
         'messages': messages,
         'id': p._id,
         'mid': e._id
       })
+      // compute if new match
+      if (self.matches[m.id] == undefined) {
+        console.log('new match [' + m.id + ']' + m.name)
+      } else {
+        // compute if new messages
+        if (self.matches[m.id].messages.length < m.messages.length) {
+          console.log('new messages from [' + m.id + ']' + m.name)
+        }
+      }
+      matches[p._id] = m
     })
-    verbose('Matches before : ' + Object.keys(self.matches).length)
-    verbose('Matches after : ' + Object.keys(matches).length)
-    if (Object.keys(matches).length > Object.keys(self.matches).length) {
-      console.log('You have new likes !!!')
+    // Compute if lost matches
+    for (k in self.matches) {
+      if (matches[k] == undefined) {
+        console.log('lost match [' + self.matches[k].id + ']' + self.matches[k].name)
+      }
     }
     self.matches = matches
     cb()
@@ -387,22 +406,52 @@ function Tinder() {
     var rc = 0
     var lf = function() {
       if (rc < recs.length) {
-        self.recLike(lf, {id: recs[rc]})
+        r = self.recs[recs[rc]]
         rc++
+        // If interactive mode
+        if (i) {
+          gkf = function() {
+            console.log('Do you want to like [' + r.id + ']' + r.name + ' ? [y/n/q]')
+            getKey(function(gk) {
+              if (gk != 'y' && gk != 'n' && gk != 'q') {
+                console.log('Please type y for yes, n for no or q to quit')
+                gkf()
+              }
+              if (gk == 'y') {
+                self.recLike(lf, {id: r.id})
+              } else if (gk == 'n') {
+                self.recLike(lf, {id: r.id, l: false})
+              } else {
+                cb()
+              }
+            })
+          }
+          gkf()
+        // Directely like everybody
+        } else {
+          // Do the like
+          self.recLike(lf, {id: r.id})
+        }
       } else {
         cb()
       }
     }
     lf()
   }
-  
+
   // Recs match
   this.recLike = function(cb, o) {
 
     // Get the rec
-    r = self.getRec(o.id)
+    var r = self.getRec(o.id)
+    var l = o.l || true
+    var path = (l) ? 'like' : 'unlike'
 
-    verbose('Linking : ' + r.name)
+    if (l) {
+      verbose('Linking : ' + r.name)
+    } else {
+      verbose('Unliking : ' + r.name)
+    }
 
     var heads = extend({}, self.http_headers, {
       'X-Auth-Token': self.access_token
@@ -410,7 +459,7 @@ function Tinder() {
     var options = {
       host: self.host,
       port: '443',
-      path: '/like/'+r.id,
+      path: '/' + path + '/'+r.id,
       method: 'GET',
       headers: heads
     }
@@ -421,9 +470,14 @@ function Tinder() {
       var r = ""
       var end = function() {
         var t = eval('[' + r + ']')[0]
+        verbose(t, 'debug')
         verbose('Remaining likes : ' + t.likes_remaining)
-        // We can remove the recommendation from the list
-        delete self.recs[o.id]
+        if (t.likes_remaining == 0) {
+          verbose('No more likes')
+        } else {
+          // We can remove the recommendation from the list
+          delete self.recs[o.id]
+        }
         // Call the callback
         cb()
       }
@@ -441,7 +495,7 @@ function Tinder() {
     // get the data
     get_req.end()
   }
-  
+
   // Recs urls
   this.printAllRecsUrls = function(cb, o) {
     var recs = []
@@ -464,8 +518,8 @@ function Tinder() {
             pc = 0
           }
           if (mc < recs.length) {
-            var b = new Buffer('wget "' + recs[mc].photos[pc].url + '" -O ' +
-                recs[mc].name + '_' + pc + '.jpg\n')
+            var b = new Buffer('wget "' + recs[mc].photos[pc].url + '" -O "' +
+                recs[mc].name + '_' + pc + '.jpg"\n')
             fs.write(fd, b, 0, b.length, null, function(a, b , c) {
               wf(mc, pc + 1)
             })
@@ -502,8 +556,8 @@ function Tinder() {
             pc = 0
           }
           if (mc < matches.length) {
-            var b = new Buffer('wget "' + matches[mc].photos[pc].url + '" -O ' +
-                matches[mc].name + '_' + pc + '.jpg\n')
+            var b = new Buffer('wget "' + matches[mc].photos[pc].url + '" -O "' +
+                matches[mc].name + '_' + pc + '.jpg"\n')
             fs.write(fd, b, 0, b.length, null, function(a, b , c) {
               wf(mc, pc + 1)
             })
@@ -529,6 +583,7 @@ function Options() {
   this.doOptions = function(cb) {
     opt = require('node-getopt').create([
       ['v', 'verbose'             ,'Verbose output'],
+      ['d', 'debug'               ,'Debug mode'],
       ['u', 'update'              ,'Update matches'],
       ['U', 'update-recs'         ,'Update recommendations'],
       ['c', 'chick=ARG'           ,'Set chick id'],
@@ -540,6 +595,7 @@ function Options() {
       ['w', 'wget-matches=ARG'    ,'Compute wget script for match photo and write to file'],
       ['W', 'wget-recs=ARG'       ,'Compute wget script for match photo and write to file'],
       [null,'extrem-mass-like'    ,'Extrem mass like dude, the casual way'],
+      ['i', 'interactive'         ,'Interactive mode, for extrem mass like'],
       ['h', 'help'                ,'display this help'],
       ['', 'version'              ,'show version']
     ])              // create Getopt instance
@@ -578,6 +634,15 @@ function Pipeline(options, tinder) {
       // Build the pipeline
       if (o.verbose) {
         v = true
+        verbose('Verbose mode')
+      }
+      if (o.interactive) {
+        verbose('Interactive mode')
+        i = true
+      }
+      if (o.debug) {
+        verbose('Debug mode')
+        debug = true
       }
       self.p.push(new Command({f: self.tinder.cacheLoad}))
       if (o.update) {
@@ -659,6 +724,7 @@ function main() {
   // Build pipeline
   p = new Pipeline(new Options(), new Tinder())
   p.buildPipeline()
+  prompt.start()
   p.execute(function() {
     verbose('Goodbye')
   })
