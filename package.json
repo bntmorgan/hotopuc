@@ -4,7 +4,9 @@
   "description": "How to pick up chicks",
   "main": "app.js",
   "dependencies": {
-    "extend": "~2.0.1"
+    "extend": "~2.0.1",
+    "node-getopt": "~0.2.3",
+    "prompt": "~0.2.14",
   },
   "devDependencies": {},
   "scripts": {

@@ -18,6 +18,7 @@ var prompt = require('prompt')
 var v = false
 var debug = false
 var i = false
+var p = false
 var verbose = function(s, l) {
   if (typeof(l)==='undefined') l = 'info';
   if (l == 'debug' && debug == false) {
@@ -70,9 +71,8 @@ function Photo(o) {
 
 // Authenticate
 //
-// Get fb token
-//
-// https://www.facebook.com/dialog/oauth?client_id=464891386855067&redirect_uri=https://www.facebook.com/connect/login_success.html&scope=basic_info,email,public_profile,user_about_me,user_activities,user_birthday,user_education_history,user_friends,user_interests,user_likes,user_location,user_photos,user_relationship_details&response_type=token
+// Get fb token 
+// See tinderplusplus on github code
 //
 // fb_token = '<fb-token>'
 //
@@ -229,6 +229,10 @@ function Tinder() {
     var m = null
     self.raw_matches.forEach(function(e) {
       var p = e.person
+      if (typeof(p)==='undefined') {
+        verbose('malformed match ...', 'debug')
+        return
+      }
       verbose('Id : ' + p._id, 'debug')
       verbose('  name : ' + p.name, 'debug')
       photos = []
@@ -253,12 +257,14 @@ function Tinder() {
         'mid': e._id
       })
       // compute if new match
-      if (self.matches[m.id] == undefined) {
-        console.log('new match [' + m.id + ']' + m.name)
-      } else {
-        // compute if new messages
-        if (self.matches[m.id].messages.length < m.messages.length) {
-          console.log('new messages from [' + m.id + ']' + m.name)
+      if (self.matches != undefined) {
+        if (self.matches[m.id] == undefined) {
+          console.log('new match [' + m.id + ']' + m.name)
+        } else {
+          // compute if new messages
+          if (self.matches[m.id].messages.length < m.messages.length) {
+            console.log('new messages from [' + m.id + ']' + m.name)
+          }
         }
       }
       matches[p._id] = m
@@ -289,12 +295,12 @@ function Tinder() {
 
   // Save the matches into a cache file DB
   this.cacheLoad = function(cb, o) {
-    fs.readFile(".matchesDB",  null, function(err, b) {
+    fs.readFile(__dirname + "/.matchesDB",  null, function(err, b) {
       if (err) {
         throw 'error opening file: ' + err;
       }
       self.matches = eval('[' + b + ']')[0]
-      fs.readFile(".recsDB",  null, function(err, b) {
+      fs.readFile(__dirname + "/.recsDB",  null, function(err, b) {
         if (err) {
           throw 'error opening file: ' + err;
         }
@@ -307,12 +313,12 @@ function Tinder() {
 
   // Save the matches into a cache file DB
   this.cacheSave = function(cb, o) {
-    fs.writeFile(".matchesDB", JSON.stringify(self.matches, null, 2),
+    fs.writeFile(__dirname + "/.matchesDB", JSON.stringify(self.matches, null, 2),
         function(err) {
       if (err) {
         throw 'error opening file: ' + err;
       }
-      fs.writeFile(".recsDB", JSON.stringify(self.recs, null, 2),
+      fs.writeFile(__dirname + "/.recsDB", JSON.stringify(self.recs, null, 2),
           function(err) {
         if (err) {
           throw 'error opening file: ' + err;
@@ -411,20 +417,42 @@ function Tinder() {
         // If interactive mode
         if (i) {
           gkf = function() {
-            console.log('Do you want to like [' + r.id + ']' + r.name + ' ? [y/n/q]')
-            getKey(function(gk) {
-              if (gk != 'y' && gk != 'n' && gk != 'q') {
-                console.log('Please type y for yes, n for no or q to quit')
-                gkf()
-              }
-              if (gk == 'y') {
-                self.recLike(lf, {id: r.id})
-              } else if (gk == 'n') {
-                self.recLike(lf, {id: r.id, l: false})
+            var dlPictures = function(i) {
+              if (i == r.photos.length) {
+                var exec = require('child_process').exec;
+                var cmd = "/usr/bin/feh ";
+                var j = 0;
+                for (f in r.photos) {
+                  cmd += " '/tmp/" + r.name + "_" + j + ".jpg'"
+                  j++
+                }
+                exec(cmd, function(error, stdout, stderr) {
+                  console.log('Do you want to like [' + r.id + ']' + r.name +
+                    ' ? [y/n/q]')
+                  getKey(function(gk) {
+                    if (gk != 'y' && gk != 'n' && gk != 'q') {
+                      console.log('Please type y for yes, n for no or q to quit')
+                      gkf()
+                    }
+                    if (gk == 'y') {
+                      self.recLike(lf, {id: r.id})
+                    } else if (gk == 'n') {
+                      self.recLike(lf, {id: r.id, l: false})
+                    } else {
+                      cb()
+                    }
+                  })
+                });
               } else {
-                cb()
+                var exec = require('child_process').exec;
+                var cmd = "/usr/bin/wget '" + r.photos[i].url + "' -O '/tmp/" +
+                  r.name + "_" + i + ".jpg'";
+                exec(cmd, function(error, stdout, stderr) {
+                  dlPictures(i + 1);
+                });
               }
-            })
+            }
+            dlPictures(0)
           }
           gkf()
         // Directely like everybody
@@ -477,9 +505,9 @@ function Tinder() {
         } else {
           // We can remove the recommendation from the list
           delete self.recs[o.id]
+          // Call the callback
+          cb()
         }
-        // Call the callback
-        cb()
       }
       res.on('data', function (chunk) {
         r += chunk
@@ -594,10 +622,10 @@ function Options() {
       ['p', 'print'               ,'Print a matched chick'],
       ['w', 'wget-matches=ARG'    ,'Compute wget script for match photo and write to file'],
       ['W', 'wget-recs=ARG'       ,'Compute wget script for rec photo and write to file'],
-      [null,'extrem-mass-like'    ,'Extrem mass like dude, the casual way'],
+      ['',  'extrem-mass-like'    ,'Extrem mass like dude, the casual way'],
       ['i', 'interactive'         ,'Interactive mode, for extrem mass like'],
-      ['h', 'help'                ,'display this help'],
-      ['', 'version'              ,'show version']
+      ['h', 'help'                ,'Display this help'],
+      ['',  'version'             ,'Show version']
     ])              // create Getopt instance
     .bindHelp()     // bind option 'help' to default action
     .parseSystem(); // parse command line
@@ -640,65 +668,74 @@ function Pipeline(options, tinder) {
         verbose('Interactive mode')
         i = true
       }
+      if (o.proxy) {
+        verbose('Proxy enabled')
+        p = true
+      }
       if (o.debug) {
         verbose('Debug mode')
         debug = true
       }
       self.p.push(new Command({f: self.tinder.cacheLoad}))
-      if (o.update) {
-        self.p.push(new Command({f: self.tinder.getUpdates}))
-        self.p.push(new Command({f: self.tinder.getMatchesInfo}))
-      }
-      if (o['update-recs']) {
-        self.p.push(new Command({f: self.tinder.getRecs}))
-        self.p.push(new Command({f: self.tinder.getRecsInfo}))
-      }
-      if (o.chick) {
-        self.chickId = o.chick
-        verbose('Match id selected is : ' + self.chickId)
-      }
-      if (o.print) {
-        if (self.chickId == null) {
-          error('Select your chick first')
+      if (o.gui) {
+        var gui = new GUI(self.tinder)
+        self.p.push(new Command({f: gui.run}))
+      } else {
+        if (o.update) {
+          self.p.push(new Command({f: self.tinder.getUpdates}))
+          self.p.push(new Command({f: self.tinder.getMatchesInfo}))
         }
-        self.p.push(new Command({f: self.tinder.printMatch, o: {id:
-            self.chickId}}))
-      }
-      if (o.message) {
-        if (self.chickId == null) {
-          error('Select your chick first')
+        if (o['update-recs']) {
+          self.p.push(new Command({f: self.tinder.getRecs}))
+          self.p.push(new Command({f: self.tinder.getRecsInfo}))
         }
-        self.p.push(new Command({f: self.tinder.messageSend, o: {id:
-            self.chickId, m: o.message}}))
-      }
-      if (o.list) {
-        self.p.push(new Command({f: self.tinder.printAllMatches}))
-      }
-      if (o.recs) {
-        self.p.push(new Command({f: self.tinder.printAllRecs}))
-      }
-      if (o['wget-recs']) {
-        var opt = {out: o['wget-recs']}
-        if (self.recId != null) {
-          opt.id = self.recId
+        if (o.chick) {
+          self.chickId = o.chick
+          verbose('Match id selected is : ' + self.chickId)
         }
-        self.p.push(new Command({f: self.tinder.printAllRecsUrls, o: opt}))
-      }
-      if (o['wget-matches']) {
-        var opt = {out: o['wget-matches']}
-        if (self.chickId != null) {
-          opt.id = self.chickId
+        if (o.print) {
+          if (self.chickId == null) {
+            error('Select your chick first')
+          }
+          self.p.push(new Command({f: self.tinder.printMatch, o: {id:
+              self.chickId}}))
         }
-        self.p.push(new Command({f: self.tinder.printAllMatchesUrls, o: opt}))
-      }
-      if (o.like) {
-        if (self.chickId == null) {
-          error('Select your chick first')
+        if (o.message) {
+          if (self.chickId == null) {
+            error('Select your chick first')
+          }
+          self.p.push(new Command({f: self.tinder.messageSend, o: {id:
+              self.chickId, m: o.message}}))
         }
-        self.p.push(new Command({f: self.tinder.recLike, o: {id: self.chickId}}))
-      }
-      if (o['extrem-mass-like']) {
-        self.p.push(new Command({f: self.tinder.extremMassLike}))
+        if (o.list) {
+          self.p.push(new Command({f: self.tinder.printAllMatches}))
+        }
+        if (o.recs) {
+          self.p.push(new Command({f: self.tinder.printAllRecs}))
+        }
+        if (o['wget-recs']) {
+          var opt = {out: o['wget-recs']}
+          if (self.recId != null) {
+            opt.id = self.recId
+          }
+          self.p.push(new Command({f: self.tinder.printAllRecsUrls, o: opt}))
+        }
+        if (o['wget-matches']) {
+          var opt = {out: o['wget-matches']}
+          if (self.chickId != null) {
+            opt.id = self.chickId
+          }
+          self.p.push(new Command({f: self.tinder.printAllMatchesUrls, o: opt}))
+        }
+        if (o.like) {
+          if (self.chickId == null) {
+            error('Select your chick first')
+          }
+          self.p.push(new Command({f: self.tinder.recLike, o: {id: self.chickId}}))
+        }
+        if (o['extrem-mass-like']) {
+          self.p.push(new Command({f: self.tinder.extremMassLike}))
+        }
       }
       // Everytime in the end
       self.p.push(new Command({f: self.tinder.cacheSave}))
