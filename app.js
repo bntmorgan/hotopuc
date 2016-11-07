@@ -473,7 +473,7 @@ function Tinder() {
     // Get the rec
     var r = self.getRec(o.id)
     var l = o.l || true
-    var path = (l) ? 'like' : 'unlike'
+    var path = (l) ? 'like' : 'pass'
 
     if (l) {
       verbose('Linking : ' + r.name)
